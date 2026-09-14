@@ -48,7 +48,7 @@ export class FormChangePhase extends EvolutionPhase {
     this.pokemon.getPossibleForm(this.formChange).then(transformedPokemon => {
       if (!transformedPokemon) {
         console.error(`[FORM_CHANGE] getPossibleForm returned null for ${this.pokemon.species.speciesId}`);
-        this.end();
+        this.scene.ui.setModeForceTransition(Mode.MESSAGE).then(() => this.end());
         return;
       }
       const previewSpriteKey = transformedPokemon.getSpriteKey(true);
@@ -70,7 +70,7 @@ export class FormChangePhase extends EvolutionPhase {
       if (!textureOk) {
         console.error(`[FORM_CHANGE] Missing texture for preview spriteKey=${previewSpriteKey} species=${transformedPokemon.species.speciesId} formIndex=${transformedPokemon.formIndex}`);
         transformedPokemon.destroy();
-        this.end();
+        this.scene.ui.setModeForceTransition(Mode.MESSAGE).then(() => this.end());
         return;
       }
       console.log(`[FORM_CHANGE] species=${transformedPokemon.species.speciesId} formIndex=${transformedPokemon.formIndex} spriteKey=${previewSpriteKey} textureOk=${textureOk}`);
@@ -318,7 +318,7 @@ export class FormChangePhase extends EvolutionPhase {
                           });
                         }).catch((err) => {
                           console.error(`[FORM_CHANGE] changeForm failed for ${this.pokemon.species.speciesId}:`, err);
-                          this.end();
+                          this.scene.ui.setModeForceTransition(Mode.MESSAGE).then(() => this.end());
                         });
                       });
                     });
@@ -331,7 +331,7 @@ export class FormChangePhase extends EvolutionPhase {
       });
     }).catch((err) => {
       console.error(`[FORM_CHANGE] Failed to load form assets for ${this.pokemon.species.speciesId}:`, err);
-      this.end();
+      this.scene.ui.setModeForceTransition(Mode.MESSAGE).then(() => this.end());
     });
   }
   private removeSmittyModifiers(pokemon: PlayerPokemon): void {

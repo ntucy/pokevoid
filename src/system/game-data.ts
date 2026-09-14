@@ -115,7 +115,7 @@ import { runPowerUnlockOverlays } from "#app/utils/story-cutscene-power-overlays
 import { addCorruptedRivalOverlay, playCutsceneFaintAnim } from "#app/utils/story-cutscene-overlays.js";
 export const defaultStarterSpecies: Species[] = [];
 
-export const INTERNAL_BACKUP_VERSION = 8;
+export const INTERNAL_BACKUP_VERSION = 9;
 
 export const VERSIONS_REQUIRING_BACKUP: string[] = [
     "v2.0b [The Colossal Update]",
@@ -1757,10 +1757,34 @@ export class GameData {
                                 ...(_apolloRec?.unlockedAltBuilds || []),
                                 ...(_dianaRec?.unlockedAltBuilds || []),
                             ])];
+                            const _allRecs = [_adRec, _apolloRec, _dianaRec].filter(Boolean) as any[];
+                            const _maxLevel = Math.max(..._allRecs.map((r: any) => r.level || 1));
+                            const _mergedUnlocked: Record<string, any> = {};
+                            const _mergedEssence: Record<string, number> = {};
+                            for (const _r of _allRecs) {
+                                if (_r.unlockedSkills) {
+                                    for (const [k, v] of Object.entries(_r.unlockedSkills)) {
+                                        if (!_mergedUnlocked[k]) _mergedUnlocked[k] = v;
+                                    }
+                                }
+                                if (_r.levelEssence) {
+                                    for (const [k, v] of Object.entries(_r.levelEssence)) {
+                                        const num = typeof v === 'number' ? v : 0;
+                                        _mergedEssence[k] = Math.max(_mergedEssence[k] || 0, num);
+                                    }
+                                }
+                            }
                             for (const _id of ['apollo', 'diana', 'apollo_diana'] as const) {
                                 const _dst = ((this.championData as any)[_id] ||= {}) as any;
                                 if (_mSig.length) _dst.unlockedSignaturePokemon = [..._mSig];
                                 if (_mAlt.length) _dst.unlockedAltBuilds = [..._mAlt];
+                                _dst.type1 = Type.UNKNOWN;
+                                _dst.type2 = undefined;
+                                _dst.level = _maxLevel;
+                                _dst.unlockedSkills = { ..._mergedUnlocked };
+                                if (Object.keys(_mergedEssence).length > 0) {
+                                    _dst.levelEssence = { ..._mergedEssence };
+                                }
                             }
                         }
                     }

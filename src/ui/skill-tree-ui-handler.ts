@@ -2494,20 +2494,24 @@ export default class SkillTreeUiHandler extends ModalUiHandler {
       this.config.activeSkillTree.championId as any
     );
     let treeNodes: SkillTreeNode[];
-    this.scene.executeWithSeedOffset(() => {
-      const maxDepth = isEnhancedDebug ? Number.MAX_SAFE_INTEGER : this.config.activeSkillTree.maxVisibleDepth;
-      const fullTree = gen.generateCompleteTree(maxDepth);
-      treeNodes = usePokemonSelectionTree ? applyPokemonSelectionTree(fullTree) : fullTree;
-      gd.tempSkillTreeNodes = treeNodes;
-    }, 0, this.config.activeSkillTree.seed.toString());
+    try {
+      this.scene.executeWithSeedOffset(() => {
+        const maxDepth = isEnhancedDebug ? Number.MAX_SAFE_INTEGER : this.config.activeSkillTree.maxVisibleDepth;
+        const fullTree = gen.generateCompleteTree(maxDepth);
+        treeNodes = usePokemonSelectionTree ? applyPokemonSelectionTree(fullTree) : fullTree;
+        gd.tempSkillTreeNodes = treeNodes;
+      }, 0, this.config.activeSkillTree.seed.toString());
+    } catch (e) {
+      console.error("[SKILL_TREE] Tree generation failed:", e);
+      treeNodes = gd.tempSkillTreeNodes || [];
+    }
     if (this.config.mode === SkillTreeMode.POKEMON_SELECTION) {
       const maxDepth = this.debugDepthOverride > 0 ? this.debugDepthOverride : selectionBaseDepth;
-      this.nodes = treeNodes.filter(n => n.depth <= maxDepth);
+      this.nodes = (treeNodes || []).filter(n => n.depth <= maxDepth);
     } else if (isEnhancedDebug) {
-
-      this.nodes = treeNodes;
+      this.nodes = treeNodes || [];
     } else {
-      this.nodes = treeNodes;
+      this.nodes = treeNodes || [];
     }
   }
 

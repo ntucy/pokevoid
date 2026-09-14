@@ -472,6 +472,14 @@ export class SkillTreeNodeGenerator {
   private generateSignaturePokemon(championData: PlayableChampionData): SkillTreeReward {
     const signaturePokemon = SkillTreeSelectors.pickSignaturePokemon(championData);
 
+    if (signaturePokemon == null || Species[signaturePokemon] == null) {
+      return {
+        type: SkillTreeRewardType.SIGNATURE_POKEMON,
+        data: { species: Species.PIKACHU, altBuildId: undefined, altBuild: undefined },
+        immediate: false
+      };
+    }
+
     const speciesName = Species[signaturePokemon].toLowerCase();
     const altBuildKey = `${speciesName}_${championData.id}_signature` as PokemonAltBuildId;
     const altBuild = POKEMON_ALT_BUILDS[altBuildKey];

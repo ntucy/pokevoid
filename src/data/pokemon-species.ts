@@ -1468,6 +1468,12 @@ export function isSmittyFormKey(formKey: string): boolean {
     return formKey.includes("smitty");
 }
 
+export function isBattleOnlyFormKey(formKey: string): boolean {
+    return formKey === "mega" || formKey === "mega-x" || formKey === "mega-y" || formKey === "mega-z"
+        || formKey === "primal" || formKey === "gigantamax" || formKey === "gigantamax-single"
+        || formKey === "gigantamax-rapid" || formKey === "eternamax";
+}
+
 export class PokemonForm extends PokemonSpeciesForm {
     public formName: string;
     public formKey: string;

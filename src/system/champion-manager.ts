@@ -33,7 +33,24 @@ export class ChampionManager {
 
     const data = this.gameData.championData[championId] as PlayableChampionData;
 
+    if (!data.id) {
+      data.id = championId;
+    }
+
     const definition = CHAMPION_DEFINITIONS[championId];
+
+    if (definition) {
+      if (!data.signaturePokemon?.length && definition.signaturePokemon?.length) {
+        data.signaturePokemon = [...definition.signaturePokemon];
+      }
+      if (data.level == null) {
+        data.level = 1;
+      }
+      if (data.xp == null) {
+        data.xp = 0;
+      }
+    }
+
     const registrySkills = definition?.lockedSkills;
     const unlocked = data.unlockedSkills || {};
 
@@ -57,11 +74,7 @@ export class ChampionManager {
       }
     }
 
-    if (data.lockedSkills) {
-      this.populateSkillEssenceRequirements(data);
-    }
-
-    if ((championId === "apollo" || championId === "diana") && this.gameData.activeSkillTree) {
+    if ((championId === "apollo" || championId === "diana" || championId === "apollo_diana") && this.gameData.activeSkillTree) {
       const ast = this.gameData.activeSkillTree;
 
       if (ast.runtimeType1 !== undefined) {
@@ -80,6 +93,10 @@ export class ChampionManager {
         data.unlockedTeraTypes = [...runtimeTypes];
         data.unlockedAbilities = getAbilitiesForTypes(runtimeTypes);
       }
+    }
+
+    if (data.lockedSkills) {
+      this.populateSkillEssenceRequirements(data);
     }
 
     return data;
@@ -126,12 +143,53 @@ export class ChampionManager {
 
   private populateSkillEssenceRequirements(championData: PlayableChampionData): void {
     const excludedTypes = new Set([Type.UNKNOWN, (Type as any).ALL, Type.STELLAR]);
+
+    let effectiveType1 = championData.type1;
+    let effectiveType2 = championData.type2;
+    const validTypes = [effectiveType1, effectiveType2].filter(
+      (t: any) => t !== undefined && t !== null && typeof t === "number" && !excludedTypes.has(t)
+    );
+    if (validTypes.length === 0) {
+      const cid = championData.id;
+      if (cid === "apollo_diana" || cid === "apollo" || cid === "diana") {
+        const fallbackId = cid === "apollo_diana" ? "apollo" : cid;
+        const fallbackDef = CHAMPION_DEFINITIONS[fallbackId] as any;
+        if (fallbackDef) {
+          effectiveType1 = fallbackDef.type1;
+          effectiveType2 = fallbackDef.type2;
+        }
+      }
+    }
+
+    const effectiveTypes = new Set(
+      [effectiveType1, effectiveType2].filter(
+        (t: any) => t !== undefined && t !== null && typeof t === "number" && t >= 0 && t <= 17
+      )
+    );
+
+    const isApolloDiana = (championData.id === "apollo" || championData.id === "diana" || championData.id === "apollo_diana");
+
     for (const [skillId, skillDef] of Object.entries(championData.lockedSkills)) {
-      if (skillDef.requiredEssenceWeights && skillDef.requiredEssenceWeights.length > 0) {
-        const hasValidType = skillDef.requiredEssenceWeights.some(
-          (w: any) => typeof w.type === 'number' && !excludedTypes.has(w.type)
+      let skillType1 = effectiveType1;
+      let skillType2 = effectiveType2;
+      if (isApolloDiana) {
+        const hashTypes = SkillTreeUtils.getApolloDianaTypesForLevel(championData.id, skillDef.unlockLevel);
+        skillType1 = hashTypes.type1;
+        skillType2 = hashTypes.type2;
+      }
+
+      if (!isApolloDiana && skillDef.requiredEssenceWeights && skillDef.requiredEssenceWeights.length > 0) {
+        const hasStandardType = skillDef.requiredEssenceWeights.some(
+          (w: any) => typeof w.type === 'number' && w.type >= 0 && w.type <= 17
         );
-        if (hasValidType) continue;
+        if (hasStandardType && effectiveTypes.size > 0) {
+          const weightsMatchChampion = skillDef.requiredEssenceWeights.some(
+            (w: any) => typeof w.type === 'number' && w.type >= 0 && w.type <= 17 && effectiveTypes.has(w.type)
+          );
+          if (weightsMatchChampion) continue;
+        } else if (hasStandardType) {
+          continue;
+        }
       }
 
       const rarities = getRaritiesForRewardType(skillDef.rewardType);
@@ -140,8 +198,8 @@ export class ChampionManager {
       const requirements = SkillTreeUtils.calculateSkillEssenceRequirements(
         skillDef.unlockLevel,
         championData.id,
-        championData.type1,
-        championData.type2,
+        skillType1,
+        skillType2,
         skillDef.rewardType,
         rarity
       );

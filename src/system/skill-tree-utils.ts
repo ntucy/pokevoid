@@ -127,7 +127,8 @@ export class SkillTreeUtils {
       return { type1: Type.NORMAL, type2: Type.NORMAL };
     }
 
-    const seed = `${championId}_${level}`;
+    const normalizedId = (championId === "apollo" || championId === "diana") ? "apollo_diana" : championId;
+    const seed = `${normalizedId}_${level}`;
     const hash = Utils.hashCode(seed);
 
     const type1Index = Math.abs(hash) % allTypes.length;
@@ -157,7 +158,7 @@ export class SkillTreeUtils {
     let actualType1 = championType1;
     let actualType2 = championType2;
 
-    if ((championId === "apollo" || championId === "diana" || championId === "apollo_diana") && championType1 === Type.UNKNOWN) {
+    if (championId === "apollo" || championId === "diana" || championId === "apollo_diana") {
       const apolloDianaTypes = this.getApolloDianaTypesForLevel(championId, level);
       actualType1 = apolloDianaTypes.type1;
       actualType2 = apolloDianaTypes.type2;

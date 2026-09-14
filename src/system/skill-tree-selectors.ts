@@ -76,7 +76,13 @@ export class SkillTreeSelectors {
   }
 
   static pickSignaturePokemon(champion: PlayableChampionData): Species {
-    return Utils.randSeedItem(champion.signaturePokemon || []);
+    const base = (champion.signaturePokemon || []) as Species[];
+    const unlocked = ((champion as any).unlockedSignaturePokemon || []) as Species[];
+    const pool = Array.from(new Set([...unlocked, ...base]));
+    if (pool.length === 0) {
+      return Species.PIKACHU;
+    }
+    return Utils.randSeedItem(pool);
   }
 
   static pickGeneralPokemon(champion: PlayableChampionData, scene?: BattleScene): Species {

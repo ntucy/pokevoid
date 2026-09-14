@@ -54,12 +54,27 @@ export class ChampionXPManager {
 	static getPerTypeRequiredForLevel(championData: PlayableChampionData): Array<{ types: Type[]; amount: number }> | null {
 		try {
 			const nextLevel = Math.max(1, (championData?.level || 1) + 1);
-			const def: any = ChampionManager.getInstance().getChampionData(championData.id) || championData;
+			const championId = championData.id || (championData as any).championId;
+			const def: any = championId ? (ChampionManager.getInstance().getChampionData(championId) || championData) : championData;
 			const total = Math.max(1, SkillTreeUtils.getRequiredEssenceForLevel(championData.level || 1));
 			const skills = (def?.lockedSkills) || {};
 			const target = Object.values(skills).find((s: any) => (s?.unlockLevel) === nextLevel) as any;
 			const weights = target?.requiredEssenceWeights as Array<{ type: Type | Type[]; percent?: number; amount?: number }> | undefined;
-			if (!weights || !weights.length) return null;
+			if (!weights || !weights.length) {
+				const excludedFallback = new Set([Type.UNKNOWN, (Type as any).ALL, Type.STELLAR]);
+				let champTypes = [def?.type1, def?.type2].filter(
+					(t: any) => t !== undefined && t !== null && typeof t === "number" && !excludedFallback.has(t)
+				) as Type[];
+				if (champTypes.length === 0 && (championId === "apollo_diana" || championId === "apollo" || championId === "diana")) {
+					const hashTypes = SkillTreeUtils.getApolloDianaTypesForLevel(championId, nextLevel);
+					champTypes = [hashTypes.type1, hashTypes.type2].filter(
+						(t: any) => t !== undefined && t !== null && typeof t === "number" && !excludedFallback.has(t)
+					) as Type[];
+				}
+				if (champTypes.length === 0) return null;
+				const perType = Math.ceil(total / champTypes.length);
+				return champTypes.map(t => ({ types: [t], amount: perType }));
+			}
 		const excludedTypes = new Set([Type.UNKNOWN, (Type as any).ALL, Type.STELLAR]);
 		const normalizedWeights = weights.map(w => ({
 			types: Array.isArray(w.type) ? w.type : [w.type],

@@ -928,11 +928,13 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
 
   private async onEssenceCommitted(championId: string, previousLevel: number | null = null): Promise<void> {
     this._showRequirementMode = false;
+    this.hideUnlockBtnTooltip();
     this.updateEssenceGauge(championId, true);
     this.updateGridXpGauge(championId);
     this.updateLevelUpButton(championId);
     this.updateNextSkillCostDisplay(championId);
-    const champData = this.championManager.getChampionData(championId);
+    const saveKey = this.getChampionSaveKey(championId);
+    const champData = this.championManager.getChampionData(saveKey);
     const level = champData?.level || 1;
     if (previousLevel !== null && level > previousLevel) {
       this.isLevelUpAnimationActive = true;
@@ -3588,6 +3590,7 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     }
     this.stopEssenceHold();
     this.stopHealingPulseSound();
+    this.hideUnlockBtnTooltip();
     this.destroyRequirementHoverZone();
     super.clear();
   }
@@ -3810,7 +3813,7 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
         this.stopEssenceHold();
         if (this._showRequirementMode) {
           this._showRequirementMode = false;
-          ModifierTooltipUtils.hideIfNotPinned(this.scene);
+          this.hideUnlockBtnTooltip();
           return true;
         }
         if (this.skillTooltipActive) {
@@ -4020,6 +4023,13 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     return championId;
   }
 
+  private getChampionSaveKey(championId: string): string {
+    if (championId === "apollo" || championId === "diana" || championId === "apollo_diana") {
+      return "apollo_diana";
+    }
+    return championId;
+  }
+
   private getChampionDescription(championId: string): string {
     const resolvedId = this.resolveChampionId(championId);
 
@@ -4060,6 +4070,7 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     this.skillBarScrollOffset = 0;
     this._suppressSkillBarAutoPan = false;
     this._showRequirementMode = false;
+    this.hideUnlockBtnTooltip();
     this.knownSkillsCollapsed = true;
     this.skillTooltipActive = false;
     this._hoverSkillIndex = -1;
@@ -4136,8 +4147,9 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     if (this._skillSurroundFill) { this._skillSurroundFill.destroy(); this._skillSurroundFill = null; }
 
     const resolvedId = this.resolveChampionId(championId);
+    const saveKey = this.getChampionSaveKey(championId);
     const def = CHAMPION_DEFINITIONS[resolvedId] as any;
-    const data = this.championManager.getChampionData(championId);
+    const data = this.championManager.getChampionData(saveKey);
     const championUnlocked = this.championManager.isChampionUnlocked(def?.id) || (data?.isUnlocked === true);
     const allSkills = (def?.lockedSkills ? Object.entries(def.lockedSkills) : []) as Array<[string, any]>;
     const skills = this.getOrderedSkillList(def, data, allSkills, championUnlocked);
@@ -4829,9 +4841,10 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     this.skillItemBgs = [];
 
     const viewChampionId = this.resolveChampionId(championId);
+    const saveKey = this.getChampionSaveKey(championId);
     const def = CHAMPION_DEFINITIONS[viewChampionId] as any;
     if (!def) return;
-    const data = this.championManager.getChampionData(championId);
+    const data = this.championManager.getChampionData(saveKey);
     const allSkills = (def?.lockedSkills ? Object.entries(def.lockedSkills) : []) as Array<[string, any]>;
 
     const championUnlocked = this.championManager.isChampionUnlocked(def?.id) || (data?.isUnlocked === true);
@@ -5140,7 +5153,10 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
         maxH = Math.max(maxH, icon.displayHeight);
       }
 
-      const current = Math.min(req.types.reduce((sum, ty) => sum + (data.levelEssence?.[ty] || 0), 0), req.amount);
+      const gd = (this.scene as BattleScene).gameData;
+      const staged = req.types.reduce((sum, ty) => sum + (data.levelEssence?.[ty] || 0), 0);
+      const wallet = req.types.reduce((sum, ty) => sum + (gd.getEssenceCount(ty) || 0), 0);
+      const current = Math.min(staged + wallet, req.amount);
       const amountText = addTextObject(
         this.scene,
         x,
@@ -5168,7 +5184,9 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     if (!this._unlockBtnTooltipContainer || !this._unlockBtnTooltipBg || !this._unlockBtnTooltipCostContainer) return;
 
     const selected = this.availableChampions[this.selectedChampionIndex];
-    const champData = selected ? this.championManager.getChampionData(selected) : null;
+    if (!selected) return;
+    const saveKey = this.getChampionSaveKey(selected);
+    const champData = this.championManager.getChampionData(saveKey);
     if (!champData) return;
 
     const tc = ChampionSelectUiHandler.UI_CONSTANTS.SKILL_LIST_PANEL;
@@ -5472,8 +5490,9 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     }
 
     const viewChampionId = this.resolveChampionId(championId);
+    const saveKey = this.getChampionSaveKey(championId);
     const def = CHAMPION_DEFINITIONS[viewChampionId] as any;
-    const data = this.championManager.getChampionData(championId);
+    const data = this.championManager.getChampionData(saveKey);
     const allSkills = (def?.lockedSkills ? Object.entries(def.lockedSkills) : []) as Array<[string, any]>;
 
     const championUnlocked = this.championManager.isChampionUnlocked(def.id) || (data?.isUnlocked === true);
@@ -5559,13 +5578,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
             }
           } else {
             if (this.skillTooltipCostContainer) this.skillTooltipCostContainer.setVisible(false);
-            const essenceProgress = ChampionXPManager.getEssenceProgress(data);
-            const current = Math.floor(essenceProgress.current);
-            const required = Math.floor(essenceProgress.required);
-            const legacyMsg = i18next.t("championSelect:tooltip.unlockWithEssence", { current, required, defaultValue: "Unlock by using {{current}}/{{required}} Essences to Level Up!" });
-            this.skillTooltipCost.setText(legacyMsg);
-            this.skillTooltipCost.setVisible(true);
-            this.skillTooltipCost.setColor(current >= required ? "#00ff00" : "#ff0000");
+            this.skillTooltipCost.setText("");
+            this.skillTooltipCost.setVisible(false);
           }
         } catch {
           this.skillTooltipCost.setText("");
@@ -6666,7 +6680,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
 
   private updateEssenceGauge(championId: string, animate: boolean = false): void {
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
-    const data = this.championManager.getChampionData(championId);
+    const saveKey = this.getChampionSaveKey(championId);
+    const data = this.championManager.getChampionData(saveKey);
 
     if (isUnlocked) {
       this.levelText?.setText(`Lv${data?.level ?? 1}`);
@@ -6699,7 +6714,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
 
   private updateLevelUpButton(championId: string): void {
     if (!this.useEssenceButtonContainer) return;
-    const data = this.championManager.getChampionData(championId);
+    const saveKey = this.getChampionSaveKey(championId);
+    const data = this.championManager.getChampionData(saveKey);
     const perTypeReq = ChampionXPManager.getPerTypeRequiredForLevel(data);
     const nextLevel = Math.max(1, ((data as any)?.level || 1) + 1);
     const lockedSkills = (data as any)?.lockedSkills || {};
@@ -6785,7 +6801,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     this._btnEssenceCostBg = this.scene.add.graphics();
     this._btnEssenceCostContainer.add(this._btnEssenceCostBg);
 
-    const data = this.championManager.getChampionData(championId);
+    const viewChampionId = this.resolveChampionId(championId);
+    const data = this.championManager.getChampionData(viewChampionId);
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
     if (!isUnlocked || !data) {
       this._btnEssenceCostContainer.setVisible(false);
@@ -6893,7 +6910,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     this._nextSkillCostBg = this.scene.add.graphics();
     this._nextSkillCostContainer.add(this._nextSkillCostBg);
 
-    const data = this.championManager.getChampionData(championId);
+    const viewChampionId = this.resolveChampionId(championId);
+    const data = this.championManager.getChampionData(viewChampionId);
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
     if (!isUnlocked || !data) {
       this._nextSkillCostContainer.setVisible(false);
@@ -7004,19 +7022,24 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     const existing = this._requirementBgContainer.getAll().slice(1);
     existing.forEach(obj => { this._requirementBgContainer!.remove(obj, true); });
 
-    const data = this.championManager.getChampionData(championId);
+    const viewChampionId = this.resolveChampionId(championId);
+    const data = this.championManager.getChampionData(viewChampionId);
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
     let segments: Array<{ types: Type[]; amount: number }>;
     let getHaveForTypes: (types: Type[]) => number;
+    const gd = (this.scene as BattleScene).gameData;
 
     if (isUnlocked) {
       const perType = (ChampionXPManager as any).getPerTypeRequiredForLevel?.(data) as Array<{ types: Type[]; amount: number }> | null;
       segments = perType && perType.length ? perType : this.buildLockedSegments(championId);
       const levelEssence = (data as any)?.levelEssence || {};
-      getHaveForTypes = (types) => types.reduce((s, t) => s + (levelEssence[t] || 0), 0);
+      getHaveForTypes = (types) => {
+        const staged = types.reduce((s, t) => s + (levelEssence[t] || 0), 0);
+        const wallet = types.reduce((s, t) => s + (gd.getEssenceCount(t) || 0), 0);
+        return staged + wallet;
+      };
     } else {
       segments = this.buildLockedSegments(championId);
-      const gd = (this.scene as BattleScene).gameData;
       const committed = (gd.championData?.[championId]?.unlockCommit || {}) as Record<number, number>;
       getHaveForTypes = (types) => types.reduce((s, t) => s + (committed[t] || 0), 0);
     }
@@ -7168,12 +7191,13 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
     const requiredTypesSet = new Set<Type>();
     if (isUnlocked) {
-      const data = this.championManager.getChampionData(championId);
+      const viewChampionId = this.resolveChampionId(championId);
+      const data = this.championManager.getChampionData(viewChampionId);
       const perTypeReq = (ChampionXPManager as any).getPerTypeRequiredForLevel?.(data) as Array<{ types: Type[]; amount: number }> | null;
       if (perTypeReq && perTypeReq.length) {
         for (const seg of perTypeReq) (seg.types || []).forEach(t => { if (typeof t === 'number') requiredTypesSet.add(t); });
       } else {
-        const def = CHAMPION_DEFINITIONS[championId] as any;
+        const def = CHAMPION_DEFINITIONS[viewChampionId] as any;
         [def?.type1, def?.type2].filter((t: any) => typeof t === 'number').forEach((t: Type) => requiredTypesSet.add(t));
       }
     } else {
@@ -7309,21 +7333,20 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
     let required = 0;
     let level = 1;
     try {
-      const data = this.championManager.getChampionData(championId);
+      const saveKey = this.getChampionSaveKey(championId);
+      const data = this.championManager.getChampionData(saveKey);
+      const gd = (this.scene as BattleScene).gameData;
       level = data?.level ?? 1;
       if (isUnlocked) {
         const reqs = ChampionXPManager.getPerTypeRequiredForLevel(data);
         if (reqs && reqs.length > 0) {
-
            required = reqs.reduce((sum, req) => sum + req.amount, 0);
            current = reqs.reduce((sum, req) => {
-
-               const segmentContribution = req.types.reduce((tSum, t) => tSum + ((data as any).levelEssence?.[t] || 0), 0);
-
-               return sum + Math.min(segmentContribution, req.amount);
+               const staged = req.types.reduce((tSum, t) => tSum + ((data as any).levelEssence?.[t] || 0), 0);
+               const wallet = req.types.reduce((tSum, t) => tSum + (gd.getEssenceCount(t) || 0), 0);
+               return sum + Math.min(staged + wallet, req.amount);
            }, 0);
         } else {
-
            const essenceProgress = ChampionXPManager.getEssenceProgress(data);
            current = Math.floor(essenceProgress.current);
            required = Math.floor(essenceProgress.required);
@@ -7465,7 +7488,8 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
   private canAffordLevelUp(championId: string): boolean {
     const { required } = this.getUnifiedEssenceProgressForChampion(championId);
     if (required <= 0) return false;
-    const data = this.championManager.getChampionData(championId);
+    const saveKey = this.getChampionSaveKey(championId);
+    const data = this.championManager.getChampionData(saveKey);
     if (!this.championManager.isChampionUnlockedInData(championId) || !data) return false;
     return ChampionXPManager.canMeetLevelRequirements(this.scene as BattleScene, data);
   }
@@ -7597,19 +7621,24 @@ export default class ChampionSelectUiHandler extends ModalUiHandler {
   }
 
   private updateInlineEssenceCounters(championId: string): void {
-    const data = this.championManager.getChampionData(championId);
+    const viewChampionId = this.resolveChampionId(championId);
+    const data = this.championManager.getChampionData(viewChampionId);
     const isUnlocked = this.championManager.isChampionUnlockedInData(championId);
     let segments: Array<{ types: Type[]; amount: number }>;
     let getHaveForTypes: (types: Type[]) => number;
+    const gd = (this.scene as BattleScene).gameData;
 
     if (isUnlocked) {
       const perType = (ChampionXPManager as any).getPerTypeRequiredForLevel?.(data) as Array<{ types: Type[]; amount: number }> | null;
       segments = perType && perType.length ? perType : this.buildLockedSegments(championId);
       const levelEssence = (data as any)?.levelEssence || {};
-      getHaveForTypes = (types) => types.reduce((s, t) => s + (levelEssence[t] || 0), 0);
+      getHaveForTypes = (types) => {
+        const staged = types.reduce((s, t) => s + (levelEssence[t] || 0), 0);
+        const wallet = types.reduce((s, t) => s + (gd.getEssenceCount(t) || 0), 0);
+        return staged + wallet;
+      };
     } else {
       segments = this.buildLockedSegments(championId);
-      const gd = (this.scene as BattleScene).gameData;
       const committed = (gd.championData?.[championId]?.unlockCommit || {}) as Record<number, number>;
       getHaveForTypes = (types) => types.reduce((s, t) => s + (committed[t] || 0), 0);
     }

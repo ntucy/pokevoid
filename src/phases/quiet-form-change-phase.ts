@@ -61,6 +61,8 @@ export class QuietFormChangePhase extends BattlePhase {
         }
         this.reapplyFormDependentModifiers();
         this.scene.ui.showText(getSpeciesFormChangeMessage(this.pokemon, this.formChange, preName), null, () => this.end(), 1500);
+      }).catch(() => {
+        this.end();
       });
       return;
     }
@@ -188,6 +190,9 @@ export class QuietFormChangePhase extends BattlePhase {
               });
             }
           });
+        }).catch(() => {
+          this.pokemon.setVisible(true);
+          this.end();
         });
       }
     });

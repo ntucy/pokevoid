@@ -4,7 +4,7 @@ import UI, { Mode } from "./ui/ui";
 import BattleInfo from "./ui/battle-info";
 import { RewardObtainedType, type RewardConfig } from "./ui/reward-obtained-ui-handler";
 import Pokemon, { PlayerPokemon, EnemyPokemon, YU_BATTLE_FIT, YU_PLAYER_FIT_MULT } from "./field/pokemon";
-import PokemonSpecies, { PokemonSpeciesFilter, allSpecies, getPokemonSpecies, isGlitchFormKey, isSmittyFormKey, DUELMON_ICON_ATLAS_FALLBACK_KEY, DUELMON_ICON_SCALE_OFFSET } from "./data/pokemon-species";
+import PokemonSpecies, { PokemonSpeciesFilter, allSpecies, getPokemonSpecies, isGlitchFormKey, isSmittyFormKey, isBattleOnlyFormKey, DUELMON_ICON_ATLAS_FALLBACK_KEY, DUELMON_ICON_SCALE_OFFSET } from "./data/pokemon-species";
 import {Constructor, randSeedInt} from "#app/utils";
 import * as Utils from "./utils";
 import { CondenseTrailHandle, playCondenseTrailTransition, getEffectCount } from "./field/condense-trail-transition";
@@ -2565,7 +2565,7 @@ export default class BattleScene extends SceneBase {
       return 0;
     }
 
-    const baseFormCount = species.forms.filter(f => !isGlitchFormKey(f.formKey) && !isSmittyFormKey(f.formKey)).length || 1;
+    const baseFormCount = species.forms.filter(f => !isGlitchFormKey(f.formKey) && !isSmittyFormKey(f.formKey) && !isBattleOnlyFormKey(f.formKey)).length || 1;
 
     switch (species.speciesId) {
     case Species.UNOWN:
@@ -2752,11 +2752,14 @@ export default class BattleScene extends SceneBase {
     this.rngCounter = 0;
     this.rngOffset = offset;
     this.rngSeedOverride = seedOverride || "";
-    func();
-    Phaser.Math.RND.state(state);
-    this.rngCounter = tempRngCounter;
-    this.rngOffset = tempRngOffset;
-    this.rngSeedOverride = tempRngSeedOverride;
+    try {
+      func();
+    } finally {
+      Phaser.Math.RND.state(state);
+      this.rngCounter = tempRngCounter;
+      this.rngOffset = tempRngOffset;
+      this.rngSeedOverride = tempRngSeedOverride;
+    }
   }
 
   public resetRunEndSummaryRunData(): void {
