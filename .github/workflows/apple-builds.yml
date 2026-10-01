@@ -1,0 +1,148 @@
+# Builds PokéVoid for Mac and for iPhone/iPad from the already-built game (no source code needed), and play-tests
+# both. Run it by hand (Actions > Apple builds > Run workflow) with the tag of a DRAFT release that holds:
+#   pokevoid-web-<version>.zip         the built game (dist-native, files at the zip root)
+#   pokevoid-native-kit-<version>.zip  packaging/apple/make_kit.py's kit (desktop wrapper, iOS setup, play tests)
+# It adds PokeVoid-<version>-mac.dmg and PokeVoid-<version>-ios.ipa to that draft, and the play-test screenshots as
+# run artifacts. A draft has no tag yet, so nothing here touches the published release or the tag-driven workflows.
+name: Apple builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag of the draft release with the web zip and the kit"
+        required: true
+        default: "v3.2.0"
+      upload:
+        description: "Add the .dmg and .ipa to that draft release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ inputs.tag }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Get the game and the kit
+        run: |
+          VERSION="${TAG#v}"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "pokevoid-web-$VERSION.zip" -p "pokevoid-native-kit-$VERSION.zip"
+          unzip -q "pokevoid-native-kit-$VERSION.zip" -d kit
+          mkdir -p kit/electron/web
+          unzip -q "pokevoid-web-$VERSION.zip" -d kit/electron/web
+          test -f kit/electron/web/index.html
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build the Mac app (universal, ad-hoc signed)
+        working-directory: kit/electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:ts
+          npx electron-builder --mac --publish never
+          ls -la release
+
+      - name: Play test
+        run: |
+          APP="$(ls -d kit/electron/release/mac-universal/*.app | head -1)"
+          codesign -dv "$APP" 2>&1 | head -5 || true
+          node kit/test/electron-play.mjs --app "$APP/Contents/MacOS/$(basename "$APP" .app)" --out mac-test --device mac
+
+      - name: Keep the test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-test
+          path: mac-test
+
+      - name: Add the DMG to the draft release
+        if: inputs.upload
+        run: gh release upload "$TAG" kit/electron/release/PokeVoid-*-mac.dmg -R "$GITHUB_REPOSITORY" --clobber
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Get the game and the kit
+        run: |
+          VERSION="${TAG#v}"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "pokevoid-web-$VERSION.zip" -p "pokevoid-native-kit-$VERSION.zip"
+          unzip -q "pokevoid-native-kit-$VERSION.zip" -d kit
+          mkdir -p kit/ios/dist-native
+          unzip -q "pokevoid-web-$VERSION.zip" -d kit/ios/dist-native
+          IFS=. read -r MAJOR MINOR PATCH <<< "$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$((MAJOR * 10000 + MINOR * 100 + PATCH))" >> "$GITHUB_ENV"
+
+      - name: Make the Xcode project
+        working-directory: kit/ios
+        run: ./setup.sh "$VERSION" "$BUILD"
+
+      - name: Build the .ipa (unsigned; Sideloadly signs it with the player's Apple ID)
+        working-directory: kit/ios
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/App.xcarchive archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -30
+          mkdir -p Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app Payload/
+          zip -qry "PokeVoid-$VERSION-ios.ipa" Payload
+          ls -la "PokeVoid-$VERSION-ios.ipa"
+
+      - name: Build for the Simulator
+        working-directory: kit/ios
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim build \
+            CODE_SIGNING_ALLOWED=NO | tail -20
+
+      - name: Play test (iPhone Simulator)
+        run: |
+          npm install -g appium --no-audit --no-fund
+          appium driver install xcuitest
+          (appium --address 127.0.0.1 --port 4723 --log-level warn > appium.log 2>&1 &)
+          cd kit/test
+          npm install --no-audit --no-fund --no-save webdriverio@9
+          node ios-play.mjs --app "$GITHUB_WORKSPACE/kit/ios/build/sim/Build/Products/Debug-iphonesimulator/App.app" --out "$GITHUB_WORKSPACE/ios-test"
+
+      - name: Keep the test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test
+          path: |
+            ios-test
+            appium.log
+
+      - name: Add the IPA to the draft release
+        if: inputs.upload
+        run: gh release upload "$TAG" "kit/ios/PokeVoid-$VERSION-ios.ipa" -R "$GITHUB_REPOSITORY" --clobber
