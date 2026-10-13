@@ -9,7 +9,7 @@
 		"start:dev": "vite --mode development",
 		"start:dev:host": "vite --mode development --host",
 		"build": "vite build && npm run remove-pokesave",
-		"remove-pokesave": "if exist .\\dist\\pokesave rmdir /s /q .\\dist\\pokesave",
+		"remove-pokesave": "node -e \"require('fs').rmSync('dist/pokesave', { recursive: true, force: true })\",
 		"build:beta": "vite build --mode beta && npm run remove-pokesave",
 		"preview": "vite preview",
 		"test": "vitest run --project pre && vitest run --project main",
