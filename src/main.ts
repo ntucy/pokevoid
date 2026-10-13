@@ -205,10 +205,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-if (typeof (window as any).Capacitor !== "undefined") {
-  import("@capgo/capacitor-updater").then(({ CapacitorUpdater }) => {
-    CapacitorUpdater.notifyAppReady();
-  }).catch(() => {});
-}
+(typeof (window as any).Capacitor !== "undefined") 
 
 export default game;
